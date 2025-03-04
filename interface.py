@@ -1,3 +1,4 @@
+#interface.py
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from main_window import MainWindow
@@ -7,7 +8,7 @@ from result_window import ResultWindow
 class Interface(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Transcription App v0.0.1")
+        self.setWindowTitle("Транскрибування аудіо")
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
 
         # Стек віджетів для управління вікнами

@@ -1,3 +1,4 @@
+#main_window.py
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt6.QtCore import Qt

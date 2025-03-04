@@ -1,8 +1,9 @@
+#result_windw.py
 import os
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QProgressBar, QListWidget, QListWidgetItem
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QProgressBar, QListWidget, QListWidgetItem,QFileDialog
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtGui import QTextCursor, QTextCharFormat, QFont
-from PyQt6.QtCore import Qt, QTimer, QUrl, QThread, pyqtSignal, QObject
+from PyQt6.QtGui import  QFont
+from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal, QObject
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from transcription import transcribe_audio
 
@@ -17,6 +18,7 @@ class TranscriptionWorker(QObject):
         self.model_name = model_name
         self.language = language
         self.device = device
+        
 
     def run(self):
         transcription = transcribe_audio(self.file_path, self.model_name, self.language, self.device, self.update_progress)
@@ -63,15 +65,17 @@ class ResultWindow(QWidget):
         file_name_label.setStyleSheet("font-size: 18px; color: white; margin-left: 10px;")
         top_layout.addWidget(file_name_label)
         top_layout.addStretch()
-        export_btn = QPushButton("Зберегти як..")
-        export_btn.setStyleSheet("""
+        self.export_btn = QPushButton("Зберегти як..")
+        self.export_btn.clicked.connect(self.export_transcription)
+        self.export_btn.setStyleSheet("""
             QPushButton {
                 background: #444; color: white; padding: 8px 12px; border: none; 
                 border-radius: 8px; font-size: 14px; min-width: 80px;
             }
             QPushButton:hover { background: #555; }
         """)
-        top_layout.addWidget(export_btn)
+        self.export_btn.setEnabled(False)  # Вимкнути кнопку за замовчуванням
+        top_layout.addWidget(self.export_btn)
         self.main_layout.addLayout(top_layout)
 
         # 2. Область перегляду
@@ -220,6 +224,36 @@ class ResultWindow(QWidget):
 
         self.player.setSource(QUrl.fromLocalFile(self.file_path))
 
+
+    def save_as_text(self, file_path):
+        with open(file_path, 'w', encoding='utf-8') as f:
+            for segment in self.transcription:
+                f.write(f"{segment['text']} ")
+
+    def save_as_srt(self, file_path):
+        with open(file_path, 'w', encoding='utf-8') as f:
+            for i, segment in enumerate(self.transcription, start=1):
+                start_time = self.format_time_srt(segment['start'])
+                end_time = self.format_time_srt(segment['end'])
+                f.write(f"{i}\n{start_time} --> {end_time}\n{segment['text']}\n\n")
+
+    def export_transcription(self):
+        if not self.transcription:
+            return  # Нічого не робити, якщо транскрипція порожня
+
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Експортувати транскрипцію",
+            "",
+            "Text files (*.txt);;SRT files (*.srt)"
+        )
+
+        if file_path:
+            if selected_filter == "Text files (*.txt)" or file_path.endswith('.txt'):
+                self.save_as_text(file_path)
+            elif selected_filter == "SRT files (*.srt)" or file_path.endswith('.srt'):
+                self.save_as_srt(file_path)
+
     def start_transcription_thread(self):
         self.worker = TranscriptionWorker(self.file_path, self.model_name, self.language, self.device)
         self.thread = QThread()
@@ -255,6 +289,7 @@ class ResultWindow(QWidget):
             segment['start_pos'] = start_pos  # Зберігаємо позицію для виділення
             segment['length'] = len(segment_text)
         self.thread.quit()
+        self.export_btn.setEnabled(True)
 
     def on_transcription_error(self, error):
         self.transcription_list.addItem(QListWidgetItem(f"Помилка: {error}"))
@@ -300,6 +335,14 @@ class ResultWindow(QWidget):
             else:
                 item.setBackground(Qt.GlobalColor.transparent)
 
+    def format_time_srt(self, seconds):
+        hrs, rem = divmod(seconds, 3600)
+        mins, rem = divmod(rem, 60)
+        secs, ms = divmod(rem, 1)
+        ms = int(ms * 1000)
+        return f"{int(hrs):02}:{int(mins):02}:{int(secs):02},{ms:03}"
+
+
     def change_speed(self, event):
         current_speed = float(self.speed_label.text().replace("x", ""))
         if event.button() == Qt.MouseButton.LeftButton:
@@ -338,6 +381,7 @@ class ResultWindow(QWidget):
         self.progress_bar_media.setValue(0)
         self.timestamp.setText("00:00 / 00:00")
         self.speed_label.setText("1.00x")
+        self.export_btn.setEnabled(False)
 
         if hasattr(self, 'thread') and self.thread.isRunning():
             self.thread.quit()
