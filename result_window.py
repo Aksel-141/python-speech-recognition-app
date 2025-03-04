@@ -9,14 +9,16 @@ from transcription import transcribe_audio
 class ResultWindow(QWidget):
     def __init__(self, parent, file_path, model_name, language, device):
         super().__init__()
-        self.parent = parent  # Посилання на Interface
+        self.parent = parent
         self.file_path = file_path
         self.model_name = model_name
         self.language = language
         self.device = device
-        self.is_video = file_path.lower().endswith((".mp4", ".mkv", ".avi"))
+        self.is_video = file_path.lower().endswith((".mp4", ".mkv", ".avi", ".mov"))
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
+        print(f"Initial is_video: {self.is_video}")
 
+        # Основний layout
         main_layout = QHBoxLayout(self)
         main_layout.addStretch()
 
@@ -26,14 +28,16 @@ class ResultWindow(QWidget):
         main_layout.addWidget(container_widget)
         main_layout.addStretch()
 
-        layout = QVBoxLayout(container_widget)
-        layout.setContentsMargins(20, 20, 20, 20)
+        self.layout = QVBoxLayout(container_widget)
+        self.layout.setContentsMargins(20, 20, 20, 20)
 
+        # Кнопка "Назад"
         back_btn = QPushButton("Назад")
         back_btn.setStyleSheet("background: #1e90ff; color: white; padding: 5px; border: none; border-radius: 5px;")
         back_btn.clicked.connect(self.back_to_config)
-        layout.addWidget(back_btn)
+        self.layout.addWidget(back_btn)
 
+        # Заголовок
         header_layout = QHBoxLayout()
         header = QLabel("Результати транскрибування")
         header.setStyleSheet("font-size: 24px;")
@@ -47,43 +51,23 @@ class ResultWindow(QWidget):
             QPushButton:hover { background: #0073e6; }
         """)
         header_layout.addWidget(export_btn)
-        layout.addLayout(header_layout)
+        self.layout.addLayout(header_layout)
 
+        # Прогрес
         self.progress_label = QLabel("Прогрес обробки: Очікування...")
         self.progress_label.setStyleSheet("font-size: 18px; margin-top: 20px;")
-        layout.addWidget(self.progress_label)
+        self.layout.addWidget(self.progress_label)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
         self.progress_bar.setStyleSheet("QProgressBar { background: #333; border-radius: 5px; } QProgressBar::chunk { background: #007bff; }")
-        layout.addWidget(self.progress_bar)
+        self.layout.addWidget(self.progress_bar)
 
-        self.output = QTextEdit()
-        self.output.setReadOnly(True)
-        self.output.setStyleSheet("background: #222; color: #ccc; border: none; font-size: 14px; margin-top: 10px;")
+        # Медіа віджет (буде додано пізніше в setup_media)
+        self.media_widget = None
 
-        if self.is_video:
-            self.player = QMediaPlayer()
-            self.audio_output = QAudioOutput()
-            self.player.setAudioOutput(self.audio_output)
-            self.video_widget = QVideoWidget()
-            self.video_widget.setStyleSheet("background-color: #000; border-radius: 5px;")
-            self.video_widget.setMinimumHeight(300)
-            self.player.setVideoOutput(self.video_widget)
-            self.player.setSource(QUrl.fromLocalFile(self.file_path))
-            layout.addWidget(self.video_widget)
-        else:
-            self.player = QMediaPlayer()
-            self.audio_output = QAudioOutput()
-            self.player.setAudioOutput(self.audio_output)
-            self.audio_widget = QVideoWidget()
-            self.audio_widget.setStyleSheet("background-color: #000; border-radius: 5px;")
-            self.audio_widget.setMinimumHeight(0)
-            self.player.setVideoOutput(self.audio_widget)
-            self.player.setSource(QUrl.fromLocalFile(self.file_path))
-            layout.addWidget(self.audio_widget)
-
+        # Контролери
         controls_widget = QWidget()
         controls_widget.setStyleSheet("background-color: #000;")
         controls_layout = QHBoxLayout(controls_widget)
@@ -118,25 +102,55 @@ class ResultWindow(QWidget):
         self.speed_label.mousePressEvent = self.change_speed
         controls_layout.addWidget(self.speed_label)
 
-        layout.addWidget(controls_widget)
-        layout.addWidget(self.output)
+        self.layout.addWidget(controls_widget)
 
+        # Вивід тексту
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setStyleSheet("background: #222; color: #ccc; border: none; font-size: 14px; margin-top: 10px;")
+        self.layout.addWidget(self.output)
+
+        # Ініціалізація плеєра
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
         self.player.positionChanged.connect(self.update_position)
         self.player.durationChanged.connect(self.update_duration)
 
         self.transcription = []
+        self.setup_media()  # Налаштування медіа
         QTimer.singleShot(100, self.run_transcription)
 
+    def setup_media(self):
+        """Налаштування медіа віджета залежно від типу файлу."""
+        if self.media_widget:
+            self.layout.removeWidget(self.media_widget)
+            self.media_widget.deleteLater()
+            self.media_widget = None
+
+        if self.is_video:
+            self.media_widget = QVideoWidget()
+            self.media_widget.setStyleSheet("background-color: #000; border-radius: 5px;")
+            self.media_widget.setMinimumHeight(300)
+            self.player.setVideoOutput(self.media_widget)
+        else:
+            self.media_widget = QLabel(f"Відтворюється аудіо: {os.path.basename(self.file_path)}")
+            self.media_widget.setStyleSheet("font-size: 14px; color: #999; margin-top: 10px;")
+            self.player.setVideoOutput(None)  # Без відеовиходу для аудіо
+
+        self.layout.insertWidget(3, self.media_widget)  # Вставляємо перед контролями
+        self.player.setSource(QUrl.fromLocalFile(self.file_path))
+
     def update_content(self, file_path, model_name, language, device):
+        """Оновлення вмісту при зміні файлу."""
+        self.reset()
         self.file_path = file_path
         self.model_name = model_name
         self.language = language
         self.device = device
-        self.is_video = file_path.lower().endswith((".mp4", ".mkv", ".avi"))
-        self.player.setSource(QUrl.fromLocalFile(self.file_path))
-        self.progress_bar.setValue(0)
-        self.output.clear()
-        self.transcription = []
+        self.is_video = file_path.lower().endswith((".mp4", ".mkv", ".avi", ".mov"))
+        print(f"Updated is_video: {self.is_video}")
+        self.setup_media()
         QTimer.singleShot(100, self.run_transcription)
 
     def seek(self, seconds):
@@ -225,5 +239,30 @@ class ResultWindow(QWidget):
         self.speed_label.setText(f"{new_speed:.2f}x")
         self.player.setPlaybackRate(new_speed)
 
+    def reset(self):
+        """Скидання стану."""
+        self.file_path = None
+        self.model_name = None
+        self.language = None
+        self.device = None
+        self.is_video = False
+        self.progress_bar.setValue(0)
+        self.output.clear()
+        self.transcription = []
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self.player.setVideoOutput(None)  # Очищаємо відеовихід
+        self.progress_label.setText("Прогрес обробки: Очікування...")
+        self.progress_bar_media.setValue(0)
+        self.timestamp.setText("00:00 / 00:00")
+        self.speed_label.setText("1.00x")
+
+        # Видаляємо медіа віджет
+        if self.media_widget:
+            self.layout.removeWidget(self.media_widget)
+            self.media_widget.deleteLater()
+            self.media_widget = None
+
     def back_to_config(self):
+        self.reset()
         self.parent.switch_to_config(self.file_path)
