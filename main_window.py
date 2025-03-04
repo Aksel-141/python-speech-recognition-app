@@ -1,33 +1,26 @@
 import os
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
-class MainWindow(QMainWindow):
-    def __init__(self):
+class MainWindow(QWidget):
+    def __init__(self, parent):
         super().__init__()
-        self.setWindowTitle("Transcription App v0.0.1")
+        self.parent = parent  # Посилання на Interface
         self.setAcceptDrops(True)
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
 
-        # Центральний віджет із контейнером
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # Головний горизонтальний layout для центрування
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.addStretch()  # Ліва розтяжка для центрування
-        
-        # Внутрішній віджет із фіксованою шириною 75-80% від ширини вікна
+        main_layout = QHBoxLayout(self)
+        main_layout.addStretch()
+
         container_widget = QWidget()
-        container_widget.setMaximumWidth(int(self.width() * 0.75))
-        container_widget.setMinimumWidth(int(self.width() * 0.75))
+        container_widget.setMaximumWidth(int(parent.width() * 0.75))
+        container_widget.setMinimumWidth(int(parent.width() * 0.75))
         main_layout.addWidget(container_widget)
-        main_layout.addStretch()  # Права розтяжка для центрування
-        
-        # Внутрішній вертикальний layout для контенту
+        main_layout.addStretch()
+
         layout = QVBoxLayout(container_widget)
-        layout.setContentsMargins(20, 20, 20, 20)  # padding: 20px
+        layout.setContentsMargins(20, 20, 20, 20)
 
         header = QLabel("Головна")
         header.setStyleSheet("font-size: 24px; border-bottom: 1px solid #333; padding-bottom: 10px;")
@@ -61,16 +54,4 @@ class MainWindow(QMainWindow):
         self.open_config_window(file_path)
 
     def open_config_window(self, file_path=None):
-        from config_window import ConfigWindow
-        self.config_window = ConfigWindow(file_path)
-        self.config_window.showMaximized()  # Відкриваємо конфігураційне вікно також на весь екран
-        self.hide()
-
-    def show(self):
-        super().showMaximized()  # Відкриваємо вікно на весь екран
-
-    def resizeEvent(self, event):
-        container_widget = self.centralWidget().layout().itemAt(1).widget()
-        container_widget.setMaximumWidth(int(self.width() * 0.75))
-        container_widget.setMinimumWidth(int(self.width() * 0.75))
-        super().resizeEvent(event)
+        self.parent.switch_to_config(file_path)

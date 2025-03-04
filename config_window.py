@@ -1,32 +1,25 @@
 import os
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QFileDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QFileDialog
 
-class ConfigWindow(QMainWindow):
-    def __init__(self, file_path=None):
+class ConfigWindow(QWidget):
+    def __init__(self, parent, file_path=None):
         super().__init__()
-        self.setWindowTitle("Конфігурація обробки файлу")
-        self.setAcceptDrops(True)  # Додаємо підтримку drag-and-drop
+        self.parent = parent  # Посилання на Interface
+        self.file_path = file_path
+        self.setAcceptDrops(True)
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
-        self.file_path = file_path  # Додаємо визначення атрибуту file_path
 
-        # Центральний віджет із контейнером
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # Головний горизонтальний layout для центрування
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.addStretch()  # Ліва розтяжка для центрування
-        
-        # Внутрішній віджет із фіксованою шириною 75-80% від ширини вікна
+        main_layout = QHBoxLayout(self)
+        main_layout.addStretch()
+
         container_widget = QWidget()
-        container_widget.setMaximumWidth(int(self.width() * 0.75))
-        container_widget.setMinimumWidth(int(self.width() * 0.75))
+        container_widget.setMaximumWidth(int(parent.width() * 0.75))
+        container_widget.setMinimumWidth(int(parent.width() * 0.75))
         main_layout.addWidget(container_widget)
-        main_layout.addStretch()  # Права розтяжка для центрування
-        
-        # Внутрішній вертикальний layout для контенту
+        main_layout.addStretch()
+
         layout = QVBoxLayout(container_widget)
-        layout.setContentsMargins(20, 20, 20, 20)  # padding: 20px
+        layout.setContentsMargins(20, 20, 20, 20)
 
         back_btn = QPushButton("Назад")
         back_btn.setStyleSheet("background: #1e90ff; color: white; padding: 5px; border: none; border-radius: 5px;")
@@ -92,33 +85,23 @@ class ConfigWindow(QMainWindow):
 
         layout.addStretch()
 
+    def set_file_path(self, file_path):
+        self.file_path = file_path
+        self.file_list.setText("Немає вибраного файлу" if not file_path else f"🎵 {os.path.basename(file_path)}")
+        self.start_btn.setEnabled(bool(file_path))
+
     def select_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Вибрати файл", "", "Audio/Video Files (*.*)")
         if file_path:
-            self.file_path = file_path  # Визначаємо атрибут file_path
+            self.file_path = file_path
             self.file_list.setText(f"🎵 {os.path.basename(file_path)}")
             self.start_btn.setEnabled(True)
 
     def start_transcription(self):
         if not self.file_path:
             return
-        from result_window import ResultWindow
-        self.result_window = ResultWindow(self.file_path, self.model_select.currentText(), 
-                                         self.language_select.currentText(), self.device_select.currentText())
-        self.result_window.showMaximized()  # Відкриваємо результат на весь екран
-        self.hide()
+        self.parent.switch_to_result(self.file_path, self.model_select.currentText(), 
+                                    self.language_select.currentText(), self.device_select.currentText())
 
     def back_to_main(self):
-        from main_window import MainWindow
-        self.main_window = MainWindow()
-        self.main_window.showMaximized()  # Відкриваємо головне вікно на весь екран
-        self.close()
-
-    def show(self):
-        super().showMaximized()  # Відкриваємо вікно на весь екран
-
-    def resizeEvent(self, event):
-        container_widget = self.centralWidget().layout().itemAt(1).widget()
-        container_widget.setMaximumWidth(int(self.width() * 0.75))
-        container_widget.setMinimumWidth(int(self.width() * 0.75))
-        super().resizeEvent(event)
+        self.parent.switch_to_main()
