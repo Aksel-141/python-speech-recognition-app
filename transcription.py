@@ -6,7 +6,7 @@ import os
 import json
 import logging
 
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+logging.basicConfig(filename='transcription.log', level=logging.INFO, encoding='utf-8')
 
 
 
@@ -53,7 +53,7 @@ def transcribe_audio(file_path, model_name, language="uk", device="cpu", progres
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print(json.dumps({"error": "Помилка: Не передано всі необхідні параметри."}), flush=True)
+        # print(json.dumps({"error": "Помилка: Не передано всі необхідні параметри."}), flush=True)
         sys.exit(1)
     
     audio_file_path = sys.argv[1]
@@ -62,4 +62,4 @@ if __name__ == "__main__":
     device = sys.argv[4]
     
     transcription = transcribe_audio(audio_file_path, model_name, language, device)
-    print(json.dumps(transcription), flush=True)
+    # print(json.dumps(transcription), flush=True)

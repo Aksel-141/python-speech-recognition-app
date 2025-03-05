@@ -515,7 +515,7 @@ class ResultWindow(QWidget):
             click_position = event.position().x()
             total_width = self.progress_bar_media.width()
             new_position = (click_position / total_width) * self.player.duration()
-            self.player.setPosition(new_position)
+            self.player.setPosition(int(new_position))
 
     def confirm_interrupt_transcription(self):
         if hasattr(self, "thread") and self.thread and self.thread.isRunning():
