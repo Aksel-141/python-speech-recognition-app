@@ -44,7 +44,7 @@ class TranscriptionWorker(QObject):
             self.language,
             self.device,
             self.update_progress,
-            stop_flag=lambda: self._stop_requested,
+            # stop_flag=lambda: self._stop_requested,
         )
         if "error" in transcription:
             self.error.emit(transcription["error"])
@@ -57,50 +57,6 @@ class TranscriptionWorker(QObject):
         self.progress.emit(message)
 
 
-class LoadingDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Завершення транскрибування")
-        self.setModal(True)
-        self.setFixedSize(300, 100)
-
-        self.setStyleSheet(
-            """
-            QDialog {
-                background-color: #121212;
-                border: 1px solid #333;
-                border-radius: 8px;
-            }
-        """
-        )
-
-        layout = QVBoxLayout(self)
-
-        label = QLabel("Зачекайте, транскрибування завершується...")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet(
-            """
-            QLabel {
-                color: white;
-                font-size: 14px;
-                font-family: Arial, sans-serif;
-            }
-        """
-        )
-        layout.addWidget(label)
-
-        gif_path = os.path.join(os.path.dirname(__file__), "loading.gif")
-        self.movie = QMovie(gif_path) 
-        self.movie_label = QLabel()
-        self.movie_label.setMovie(self.movie)
-        self.movie_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.movie.start()
-        layout.addWidget(self.movie_label)
-
-        layout.addStretch()
-        self.update()
-        self.repaint()
-        QApplication.processEvents() 
 
 class ResultWindow(QWidget):
     def __init__(self, parent, file_path, model_name, language, device):
@@ -529,16 +485,14 @@ class ResultWindow(QWidget):
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                loading_dialog = LoadingDialog(self)
-                QApplication.processEvents()
-                loading_dialog.show()
-
                 if hasattr(self, "worker"):
                     self.worker.stop()
-                self.thread.quit()
+                self.thread.terminate()  # Негайно завершуємо потік
                 self.thread.wait()
 
-                loading_dialog.close()
+                # Очищення ресурсів
+                self.thread.deleteLater()
+                self.worker.deleteLater()
 
                 self.progress_label.setText("Прогрес обробки: Перервано")
                 self.progress_bar.setValue(0)
