@@ -1,0 +1,2 @@
+pyinstaller --windowed --noconsole --icon=icon.ico --add-data "icon.ico;." interface.py
+

@@ -2,6 +2,7 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QFileDialog
 from PyQt6.QtGui import QPixmap
+import torch
 
 class ConfigWindow(QWidget):
     def __init__(self, parent, file_path=None):
@@ -128,7 +129,14 @@ class ConfigWindow(QWidget):
         device_label.setStyleSheet("font-size: 14px; color: white;")
         device_layout.addWidget(device_label)
         self.device_select = QComboBox()
-        self.device_select.addItems(["cpu", "cuda"])
+
+        if torch.cuda.is_available():
+            self.device_select.addItems(["cpu", "cuda"])
+        else:
+            self.device_select.addItems(["cpu"])
+            # Опціонально: додайте підказку, що CUDA недоступна
+            device_label.setToolTip("CUDA недоступна на цьому пристрої")
+        
         self.device_select.setStyleSheet("""
             background: #333; color: white; border: 1px solid #444; 
             padding: 5px; border-radius: 5px;
