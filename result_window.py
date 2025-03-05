@@ -1,4 +1,3 @@
-# result_windw.py
 import os
 from PyQt6.QtWidgets import (
     QWidget,
@@ -19,6 +18,7 @@ from PyQt6.QtGui import QFont, QMovie
 from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal, QObject
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from transcription import transcribe_audio
+from datetime import timedelta
 
 
 class TranscriptionWorker(QObject):
@@ -34,28 +34,28 @@ class TranscriptionWorker(QObject):
         self.device = device
         self._stop_requested = False
 
-    def stop(self):
-        self._stop_requested = True  # Метод для встановлення прапора зупинки
+    # def stop(self):
+    #     self._stop_requested = True  # Метод для встановлення прапора зупинки (хоча тут не використовується через відсутність підтримки в transcribe_audio)
 
     def run(self):
-        transcription = transcribe_audio(
-            self.file_path,
-            self.model_name,
-            self.language,
-            self.device,
-            self.update_progress,
-            # stop_flag=lambda: self._stop_requested,
-        )
-        if "error" in transcription:
-            self.error.emit(transcription["error"])
-        elif self._stop_requested:
-            self.error.emit("Транскрибування перервано користувачем")
-        else:
-            self.finished.emit(transcription)
+        try:
+            transcription = transcribe_audio(
+                self.file_path,
+                self.model_name,
+                self.language,
+                self.device,
+                self.update_progress,
+            )
+            if "error" in transcription:
+                self.error.emit(transcription["error"])
+            else:
+                self.finished.emit(transcription)
+        except Exception as e:
+            self.error.emit(f"Помилка під час транскрибування: {str(e)}")
 
     def update_progress(self, message):
-        self.progress.emit(message)
-
+        if not self._stop_requested:  # Оновлюємо прогрес лише, якщо не зупинено
+            self.progress.emit(message)
 
 
 class ResultWindow(QWidget):
@@ -177,6 +177,7 @@ class ResultWindow(QWidget):
         """
         )
         self.progress_bar_media.setValue(0)
+        self.progress_bar_media.mousePressEvent = self.progress_bar_clicked 
         bottom_layout.addWidget(self.progress_bar_media, stretch=1)
 
         self.speed_label = QLabel("1.00x")
@@ -317,6 +318,18 @@ class ResultWindow(QWidget):
                 self.save_as_srt(file_path)
 
     def start_transcription_thread(self):
+        if hasattr(self, "thread") and isinstance(self.thread, QThread):
+            if self.thread.isRunning():
+                # if hasattr(self, "worker") and self.worker:
+                #     self.worker.stop()  
+                self.thread.quit()
+                self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
+                if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                    self.thread.terminate()
+                    self.thread.wait()  # Чекаємо завершення після terminate
+                self.thread.deleteLater()  # Видаляємо старий потік
+                self.worker.deleteLater()  # Видаляємо старого воркера
+
         self.worker = TranscriptionWorker(
             self.file_path, self.model_name, self.language, self.device
         )
@@ -326,8 +339,19 @@ class ResultWindow(QWidget):
         self.worker.finished.connect(self.on_transcription_finished)
         self.worker.error.connect(self.on_transcription_error)
         self.thread.started.connect(self.worker.run)
-        self.thread.finished.connect(self.thread.quit)
+        self.thread.finished.connect(self.cleanup_thread)
         self.thread.start()
+
+    def cleanup_thread(self):
+        """Очищаємо ресурси після завершення або переривання потоку."""
+        if hasattr(self, "thread") and self.thread:
+            self.thread.quit()
+            self.thread.wait()
+            self.thread.deleteLater()
+        if hasattr(self, "worker") and self.worker:
+            self.worker.deleteLater()
+        self.thread = None
+        self.worker = None
 
     def update_progress(self, message):
         self.progress_label.setText(f"Прогрес обробки: {message}")
@@ -344,22 +368,21 @@ class ResultWindow(QWidget):
 
     def on_transcription_finished(self, transcription):
         self.transcription = transcription
+        self.transcription_list.clear()  # Очищаємо список перед оновленням
         for segment in transcription:
-            start_pos = len(
-                str(self.transcription_list.count())
-            )  # Позиція для відстеження
+            start_pos = len(str(self.transcription_list.count()))  # Позиція для відстеження
             segment_text = f"{segment['time']} {segment['text']}"
             item = QListWidgetItem(segment_text)
             item.setFont(QFont("Arial", 14))
             self.transcription_list.addItem(item)
             segment["start_pos"] = start_pos  # Зберігаємо позицію для виділення
             segment["length"] = len(segment_text)
-        self.thread.quit()
+        self.cleanup_thread()  # Очищаємо ресурси після завершення
         self.export_btn.setEnabled(True)
 
     def on_transcription_error(self, error):
         self.transcription_list.addItem(QListWidgetItem(f"Помилка: {error}"))
-        self.thread.quit()
+        self.cleanup_thread()  # Очищаємо ресурси після помилки
 
     def toggle_play(self):
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
@@ -452,9 +475,21 @@ class ResultWindow(QWidget):
         self.speed_label.setText("1.00x")
         self.export_btn.setEnabled(False)
 
-        if hasattr(self, "thread") and self.thread.isRunning():
-            self.thread.quit()
-            self.thread.wait()
+        # Очищаємо ресурси потоку, якщо вони існують
+        if hasattr(self, "thread") and self.thread:
+            if self.thread.isRunning():
+                # if hasattr(self, "worker") and self.worker:
+                #     self.worker.stop()
+                self.thread.quit()
+                self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
+                if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                    self.thread.terminate()
+                    self.thread.wait()  # Чекаємо завершення після terminate
+            self.thread.deleteLater()
+            self.thread = None
+        if hasattr(self, "worker") and self.worker:
+            self.worker.deleteLater()
+            self.worker = None
 
         # Видаляємо медіа віджет, якщо він існує
         if hasattr(self, "media_widget") and self.media_widget:
@@ -475,8 +510,15 @@ class ResultWindow(QWidget):
                 self.quote_label.deleteLater()
             self.quote_label = None
 
+    def progress_bar_clicked(self, event):
+        if self.player.duration() > 0:
+            click_position = event.position().x()
+            total_width = self.progress_bar_media.width()
+            new_position = (click_position / total_width) * self.player.duration()
+            self.player.setPosition(new_position)
+
     def confirm_interrupt_transcription(self):
-        if hasattr(self, "thread") and self.thread.isRunning():
+        if hasattr(self, "thread") and self.thread and self.thread.isRunning():
             reply = QMessageBox.question(
                 self,
                 "Перервати транскрибування?",
@@ -485,20 +527,31 @@ class ResultWindow(QWidget):
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                if hasattr(self, "worker"):
-                    self.worker.stop()
-                self.thread.terminate()  # Негайно завершуємо потік
-                self.thread.wait()
-
-                # Очищення ресурсів
-                self.thread.deleteLater()
-                self.worker.deleteLater()
-
+                # if hasattr(self, "worker") and self.worker:
+                #     self.worker.stop()
+                if hasattr(self, "thread") and self.thread:
+                    self.thread.quit()
+                    self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
+                    if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                        self.thread.terminate()
+                        self.thread.wait()  # Чекаємо завершення після terminate
+                    self.cleanup_thread()  # Очищаємо ресурси
                 self.progress_label.setText("Прогрес обробки: Перервано")
                 self.progress_bar.setValue(0)
                 return True
             return False
         return True
+
+    def cleanup_thread(self):
+        """Очищаємо ресурси після завершення або переривання потоку."""
+        if hasattr(self, "thread") and self.thread:
+            self.thread.quit()
+            self.thread.wait()
+            self.thread.deleteLater()
+        if hasattr(self, "worker") and self.worker:
+            self.worker.deleteLater()
+        self.thread = None
+        self.worker = None
 
     def back_to_config(self):
         if self.confirm_interrupt_transcription():
@@ -509,6 +562,7 @@ class ResultWindow(QWidget):
         if not self.confirm_interrupt_transcription():
             event.ignore()
         else:
+            self.reset()
             event.accept()
 
 

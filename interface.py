@@ -1,7 +1,6 @@
+#interface.py
 import sys
-import os
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
-from PyQt6.QtGui import QIcon
 from main_window import MainWindow
 from config_window import ConfigWindow
 from result_window import ResultWindow
@@ -10,16 +9,6 @@ class Interface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Транскрибування аудіо")
-        
-        # Встановлюємо іконку з коректним шляхом для скрипта або білду
-        if getattr(sys, 'frozen', False):
-            # Якщо програма запущена як бінарний файл (PyInstaller)
-            icon_path = os.path.join(sys._MEIPASS, "icon.ico")
-        else:
-            # Якщо програма запущена як скрипт
-            icon_path = "icon.ico"
-        
-        self.setWindowIcon(QIcon(icon_path))
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
 
         # Стек віджетів для управління вікнами
