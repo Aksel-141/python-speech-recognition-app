@@ -397,6 +397,8 @@ class ResultWindow(QWidget):
             current_position = self.player.position()
             new_position = current_position + (seconds * 1000)
             self.player.setPosition(max(0, min(new_position, self.player.duration())))
+    
+
 
     def update_position(self, position):
         duration = self.player.duration()
@@ -410,23 +412,12 @@ class ResultWindow(QWidget):
             self.timestamp.setText(
                 f"{minutes:02}:{seconds:02} / {total_minutes:02}:{total_seconds:02}"
             )
-            self.highlight_segment(position / 1000)
 
     def update_duration(self, duration):
         if duration > 0:
             self.progress_bar_media.setMaximum(100)
 
-    def highlight_segment(self, current_time):
-        for i in range(self.transcription_list.count()):
-            item = self.transcription_list.item(i)
-            segment = self.transcription[i] if i < len(self.transcription) else None
-            if segment and segment["start"] <= current_time <= segment["end"]:
-                item.setBackground(Qt.GlobalColor.yellow)
-                # Оновлюємо цитату для відео
-                if self.is_video and hasattr(self, "quote_label") and self.quote_label:
-                    self.quote_label.setText(segment["text"])
-            else:
-                item.setBackground(Qt.GlobalColor.transparent)
+    
 
     def format_time_srt(self, seconds):
         hrs, rem = divmod(seconds, 3600)
