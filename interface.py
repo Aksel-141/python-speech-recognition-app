@@ -1,6 +1,7 @@
 #interface.py
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt6.QtGui import QIcon
 from main_window import MainWindow
 from config_window import ConfigWindow
 from result_window import ResultWindow
@@ -9,6 +10,7 @@ class Interface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Транскрибування аудіо")
+        self.setWindowIcon(QIcon("icon.ico")) 
         self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
 
         # Стек віджетів для управління вікнами
