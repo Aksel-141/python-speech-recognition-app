@@ -1,31 +1,31 @@
-#interface.py
+# interface.py
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 from PyQt6.QtGui import QIcon
 from main_window import MainWindow
 from config_window import ConfigWindow
 from result_window import ResultWindow
+from hmm_result import HMMResultWindow  # Імпортуємо нову сторінку
+
 
 class Interface(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Транскрибування аудіо")
-        self.setWindowIcon(QIcon("icon.ico")) 
-        self.setStyleSheet("background-color: #121212; color: white; font-family: Arial, sans-serif;")
+        self.setWindowIcon(QIcon("icon.ico"))
+        self.setStyleSheet(
+            "background-color: #121212; color: white; font-family: Arial, sans-serif;"
+        )
 
-        # Стек віджетів для управління вікнами
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
-        # Ініціалізація вікон
         self.main_window = MainWindow(self)
-        self.config_window = None  # Ініціалізуємо пізніше
-        self.result_window = None  # Ініціалізуємо пізніше
+        self.config_window = None
+        self.result_window = None
+        self.hmm_result_window = None  # Додаємо нове вікно
 
-        # Додаємо головне вікно в стек
         self.stack.addWidget(self.main_window)
-
-        # Показуємо на весь екран
         self.showMaximized()
 
     def switch_to_config(self, file_path=None):
@@ -38,14 +38,23 @@ class Interface(QMainWindow):
 
     def switch_to_result(self, file_path, model_name, language, device):
         if not self.result_window:
-            self.result_window = ResultWindow(self, file_path, model_name, language, device)
+            self.result_window = ResultWindow(
+                self, file_path, model_name, language, device
+            )
             self.stack.addWidget(self.result_window)
         else:
             self.result_window.update_content(file_path, model_name, language, device)
         self.stack.setCurrentWidget(self.result_window)
 
+    def switch_to_hmm_result(self):
+        if not self.hmm_result_window:
+            self.hmm_result_window = HMMResultWindow(self)
+            self.stack.addWidget(self.hmm_result_window)
+        self.stack.setCurrentWidget(self.hmm_result_window)
+
     def switch_to_main(self):
         self.stack.setCurrentWidget(self.main_window)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
