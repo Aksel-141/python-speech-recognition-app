@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, QUrl
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+
 from hmm_transcription import HMMTranscriptionWorker
 
 
@@ -30,6 +31,7 @@ class HMMResultWindow(QWidget):
         self.audio_data = None
         self.sample_rate = None
         self.segments = []
+        self.is_playing = False
         self.setStyleSheet(
             "background-color: #121212; color: white; font-family: Arial, sans-serif;"
         )
@@ -79,27 +81,47 @@ class HMMResultWindow(QWidget):
         self.top_db_spin.setRange(5.0, 50.0)
         self.top_db_spin.setValue(20.0)
         self.top_db_spin.setSingleStep(1.0)
-        self.top_db_spin.setPrefix("top_db: ")
+        self.top_db_spin.setPrefix("Чутливість до пауз: ")
+        self.top_db_spin.setToolTip(
+            "Визначає, наскільки чутливо програма виявляє паузи між словами. "
+            "Менше значення (наприклад, 10) розділяє аудіо на дрібніші частини, "
+            "більше значення (наприклад, 30) об'єднує звуки в більші сегменти."
+        )
         settings_layout.addWidget(self.top_db_spin)
 
         self.n_mfcc_spin = QSpinBox()
         self.n_mfcc_spin.setRange(5, 20)
         self.n_mfcc_spin.setValue(13)
-        self.n_mfcc_spin.setPrefix("n_mfcc: ")
+        self.n_mfcc_spin.setPrefix("Деталі звуку: ")
+        self.n_mfcc_spin.setToolTip(
+            "Визначає, наскільки детально програма аналізує звук. "
+            "Більше значення (наприклад, 15-20) дає точніше розпізнавання, "
+            "але може бути повільніше. Зазвичай 13 — оптимально."
+        )
         settings_layout.addWidget(self.n_mfcc_spin)
 
         self.min_segment_spin = QDoubleSpinBox()
         self.min_segment_spin.setRange(0.05, 1.0)
         self.min_segment_spin.setValue(0.1)
         self.min_segment_spin.setSingleStep(0.05)
-        self.min_segment_spin.setPrefix("min_segment (s): ")
+        self.min_segment_spin.setPrefix("Мін. тривалість звуку (с): ")
+        self.min_segment_spin.setToolTip(
+            "Мінімальна тривалість звукового сегмента в секундах. "
+            "Дуже короткі звуки (наприклад, менше 0.1 с) ігноруються, "
+            "щоб уникнути помилкового розділення слів."
+        )
         settings_layout.addWidget(self.min_segment_spin)
 
         self.min_pause_spin = QDoubleSpinBox()
         self.min_pause_spin.setRange(0.05, 1.0)
         self.min_pause_spin.setValue(0.2)
         self.min_pause_spin.setSingleStep(0.05)
-        self.min_pause_spin.setPrefix("min_pause (s): ")
+        self.min_pause_spin.setPrefix("Мін. пауза між словами (с): ")
+        self.min_pause_spin.setToolTip(
+            "Мінімальна тривалість паузи між словами в секундах. "
+            "Якщо пауза коротша (наприклад, 0.1 с), звуки об'єднуються в одне слово, "
+            "щоб уникнути розділення всередині слів, як 'справи'."
+        )
         settings_layout.addWidget(self.min_pause_spin)
 
         layout.addLayout(settings_layout)
@@ -119,6 +141,22 @@ class HMMResultWindow(QWidget):
         self.start_btn.clicked.connect(self.start_transcription_thread)
         self.start_btn.setEnabled(False)
         layout.addWidget(self.start_btn)
+
+        # Кнопка відтворення/паузи
+        self.play_btn = QPushButton("▶ Відтворити")
+        self.play_btn.setStyleSheet(
+            """
+            QPushButton {
+                background: #28a745; color: white; padding: 8px 12px; border: none; 
+                border-radius: 8px; font-size: 14px; margin-top: 10px;
+            }
+            QPushButton:disabled { background: #333; }
+            QPushButton:hover { background: #218838; }
+        """
+        )
+        self.play_btn.clicked.connect(self.toggle_playback)
+        self.play_btn.setEnabled(False)
+        layout.addWidget(self.play_btn)
 
         # Візуалізація аудіо
         self.figure, self.ax = plt.subplots(figsize=(10, 2))
@@ -150,10 +188,15 @@ class HMMResultWindow(QWidget):
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
+        self.player.positionChanged.connect(self.update_playback_position)
+        self.player.playbackStateChanged.connect(
+            self.on_player_state_changed
+        )  # Виправлено сигнал
 
         self.transcription = []
         self.thread = None
         self.worker = None
+        self.playback_line = None  # Мітка для поточної позиції відтворення
 
     def select_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -164,6 +207,9 @@ class HMMResultWindow(QWidget):
             self.file_label.setText(f"Файл: {os.path.basename(file_path)}")
             self.player.setSource(QUrl.fromLocalFile(file_path))
             self.start_btn.setEnabled(True)
+            self.play_btn.setEnabled(True)
+            self.play_btn.setText("▶ Відтворити")
+            self.is_playing = False
             self.transcription_list.clear()
             self.export_btn.setEnabled(False)
             self.progress_label.setText("Прогрес обробки: Очікування...")
@@ -183,7 +229,37 @@ class HMMResultWindow(QWidget):
         self.ax.set_facecolor("#222")
         self.figure.set_facecolor("#121212")
         self.ax.tick_params(colors="white")
+        self.playback_line = self.ax.axvline(
+            x=0, color="red", linestyle="--", linewidth=1
+        )  # Додаємо мітку
         self.canvas.draw()
+
+    def toggle_playback(self):
+        if not self.is_playing:
+            self.player.play()
+            self.play_btn.setText("⏸ Пауза")
+            self.is_playing = True
+        else:
+            self.player.pause()
+            self.play_btn.setText("▶ Відтворити")
+            self.is_playing = False
+
+    def update_playback_position(self, position):
+        # Оновлюємо позицію мітки на графіку
+        if self.audio_data is not None and self.sample_rate is not None:
+            current_time = (
+                position / 1000.0
+            )  # position у мілісекундах, переводимо в секунди
+            self.playback_line.set_xdata([current_time, current_time])
+            self.canvas.draw()
+
+    def on_player_state_changed(self, state):
+        # Оновлюємо стан кнопки, коли відтворення закінчується
+        if state == QMediaPlayer.PlaybackState.StoppedState:
+            self.play_btn.setText("▶ Відтворити")
+            self.is_playing = False
+            self.playback_line.set_xdata([0, 0])  # Повертаємо мітку на початок
+            self.canvas.draw()
 
     def start_transcription_thread(self):
         if not self.file_path:
@@ -261,6 +337,9 @@ class HMMResultWindow(QWidget):
         self.ax.set_facecolor("#222")
         self.figure.set_facecolor("#121212")
         self.ax.tick_params(colors="white")
+        self.playback_line = self.ax.axvline(
+            x=0, color="red", linestyle="--", linewidth=1
+        )  # Оновлюємо мітку
         self.canvas.draw()
 
     def export_transcription(self):
