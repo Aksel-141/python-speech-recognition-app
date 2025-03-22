@@ -5,7 +5,7 @@ from PyQt6.QtGui import QIcon
 from main_window import MainWindow
 from config_window import ConfigWindow
 from result_window import ResultWindow
-from hmm_result import HMMResultWindow  # Імпортуємо нову сторінку
+from dtw_result import DTWResultWindow  # Імпортуємо нову сторінку
 
 
 class Interface(QMainWindow):
@@ -48,7 +48,7 @@ class Interface(QMainWindow):
 
     def switch_to_hmm_result(self):
         if not self.hmm_result_window:
-            self.hmm_result_window = HMMResultWindow(self)
+            self.hmm_result_window = DTWResultWindow(self)
             self.stack.addWidget(self.hmm_result_window)
         self.stack.setCurrentWidget(self.hmm_result_window)
 

@@ -1,4 +1,4 @@
-# hmm_result.py
+# DTW_result.py
 import os
 import numpy as np
 import librosa
@@ -14,16 +14,15 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QFileDialog,
-    QSpinBox,
     QDoubleSpinBox,
 )
 from PyQt6.QtCore import Qt, QThread, QUrl
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from hmm_transcription import HMMTranscriptionWorker
+from dtw_transcription import DTWTranscriptionWorker
 
 
-class HMMResultWindow(QWidget):
+class DTWResultWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__()
         self.parent = parent
@@ -35,7 +34,7 @@ class HMMResultWindow(QWidget):
         self.setStyleSheet(
             "background-color: #121212; color: white; font-family: Arial, sans-serif;"
         )
-        self.setWindowTitle("HMM Transcription Result")
+        self.setWindowTitle("DTW Transcription Result")
 
         # Основний макет
         layout = QVBoxLayout(self)
@@ -79,7 +78,7 @@ class HMMResultWindow(QWidget):
 
         self.top_db_spin = QDoubleSpinBox()
         self.top_db_spin.setRange(5.0, 50.0)
-        self.top_db_spin.setValue(20.0)
+        self.top_db_spin.setValue(35.0)
         self.top_db_spin.setSingleStep(1.0)
         self.top_db_spin.setPrefix("Чутливість до пауз: ")
         self.top_db_spin.setToolTip(
@@ -89,20 +88,9 @@ class HMMResultWindow(QWidget):
         )
         settings_layout.addWidget(self.top_db_spin)
 
-        self.n_mfcc_spin = QSpinBox()
-        self.n_mfcc_spin.setRange(5, 20)
-        self.n_mfcc_spin.setValue(13)
-        self.n_mfcc_spin.setPrefix("Деталі звуку: ")
-        self.n_mfcc_spin.setToolTip(
-            "Визначає, наскільки детально програма аналізує звук. "
-            "Більше значення (наприклад, 15-20) дає точніше розпізнавання, "
-            "але може бути повільніше. Зазвичай 13 — оптимально."
-        )
-        settings_layout.addWidget(self.n_mfcc_spin)
-
         self.min_segment_spin = QDoubleSpinBox()
         self.min_segment_spin.setRange(0.05, 1.0)
-        self.min_segment_spin.setValue(0.1)
+        self.min_segment_spin.setValue(0.2)
         self.min_segment_spin.setSingleStep(0.05)
         self.min_segment_spin.setPrefix("Мін. тривалість звуку (с): ")
         self.min_segment_spin.setToolTip(
@@ -114,7 +102,7 @@ class HMMResultWindow(QWidget):
 
         self.min_pause_spin = QDoubleSpinBox()
         self.min_pause_spin.setRange(0.05, 1.0)
-        self.min_pause_spin.setValue(0.2)
+        self.min_pause_spin.setValue(0.1)
         self.min_pause_spin.setSingleStep(0.05)
         self.min_pause_spin.setPrefix("Мін. пауза між словами (с): ")
         self.min_pause_spin.setToolTip(
@@ -266,7 +254,7 @@ class HMMResultWindow(QWidget):
             return
         self.transcription_list.clear()
         self.export_btn.setEnabled(False)
-        self.worker = HMMTranscriptionWorker(
+        self.worker = DTWTranscriptionWorker(
             self.file_path,
             top_db=self.top_db_spin.value(),
             n_mfcc=self.n_mfcc_spin.value(),
@@ -367,6 +355,6 @@ if __name__ == "__main__":
     import sys
 
     app = QApplication(sys.argv)
-    window = HMMResultWindow()
+    window = DTWResultWindow()
     window.show()
     sys.exit(app.exec())
