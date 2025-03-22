@@ -6,9 +6,9 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QLabel,
-    QListWidgetItem,
     QProgressBar,
     QListWidget,
+    QListWidgetItem,
     QFileDialog,
 )
 from PyQt6.QtCore import Qt, QThread, QUrl
@@ -32,6 +32,16 @@ class HMMResultWindow(QWidget):
 
         # Верхня панель
         top_layout = QHBoxLayout()
+
+        # Кнопка "Назад"
+        self.back_btn = QPushButton("⬅ Назад")
+        self.back_btn.setStyleSheet(
+            "background: #444; color: white; padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px;"
+        )
+        self.back_btn.clicked.connect(self.back_to_main)
+        top_layout.addWidget(self.back_btn)
+
+        # Кнопка "Вибрати файл"
         self.select_file_btn = QPushButton("Вибрати файл")
         self.select_file_btn.setStyleSheet(
             "background: #444; color: white; padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px;"
@@ -39,11 +49,13 @@ class HMMResultWindow(QWidget):
         self.select_file_btn.clicked.connect(self.select_file)
         top_layout.addWidget(self.select_file_btn)
 
+        # Мітка файлу
         self.file_label = QLabel("Файл: Не вибрано")
         self.file_label.setStyleSheet("font-size: 18px;")
         top_layout.addWidget(self.file_label)
         top_layout.addStretch()
 
+        # Кнопка "Зберегти як..."
         self.export_btn = QPushButton("Зберегти як...")
         self.export_btn.setStyleSheet(
             "background: #444; color: white; padding: 8px 12px; border: none; border-radius: 8px; font-size: 14px;"
@@ -66,7 +78,7 @@ class HMMResultWindow(QWidget):
         """
         )
         self.start_btn.clicked.connect(self.start_transcription_thread)
-        self.start_btn.setEnabled(False)  # Вимкнена, поки не вибрано файл
+        self.start_btn.setEnabled(False)
         layout.addWidget(self.start_btn)
 
         # Прогрес
@@ -95,6 +107,8 @@ class HMMResultWindow(QWidget):
         self.player.setAudioOutput(self.audio_output)
 
         self.transcription = []
+        self.thread = None  # Ініціалізуємо thread як None
+        self.worker = None  # Ініціалізуємо worker як None
 
     def select_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -104,7 +118,7 @@ class HMMResultWindow(QWidget):
             self.file_path = file_path
             self.file_label.setText(f"Файл: {os.path.basename(file_path)}")
             self.player.setSource(QUrl.fromLocalFile(file_path))
-            self.start_btn.setEnabled(True)  # Активуємо кнопку після вибору файлу
+            self.start_btn.setEnabled(True)
             self.transcription_list.clear()
             self.export_btn.setEnabled(False)
             self.progress_label.setText("Прогрес обробки: Очікування...")
@@ -126,9 +140,12 @@ class HMMResultWindow(QWidget):
         self.thread.start()
 
     def cleanup_thread(self):
-        if self.thread:
-            self.thread.quit()
-            self.thread.wait()
+        if self.thread and isinstance(
+            self.thread, QThread
+        ):  # Перевіряємо, чи thread існує і є QThread
+            if self.thread.isRunning():
+                self.thread.quit()
+                self.thread.wait()
             self.thread.deleteLater()
         if self.worker:
             self.worker.deleteLater()
@@ -175,6 +192,12 @@ class HMMResultWindow(QWidget):
                     f.write(
                         f"{segment['start']:.2f}s - {segment['end']:.2f}s: {segment['text']}\n"
                     )
+
+    def back_to_main(self):
+        if self.parent:
+            self.player.stop()
+            self.cleanup_thread()
+            self.parent.switch_to_main()
 
 
 if __name__ == "__main__":
