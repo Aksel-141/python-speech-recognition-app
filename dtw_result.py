@@ -257,7 +257,6 @@ class DTWResultWindow(QWidget):
         self.worker = DTWTranscriptionWorker(
             self.file_path,
             top_db=self.top_db_spin.value(),
-            n_mfcc=self.n_mfcc_spin.value(),
             min_segment_length=self.min_segment_spin.value(),
             min_pause_length=self.min_pause_spin.value(),
         )
