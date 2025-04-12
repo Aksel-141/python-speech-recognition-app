@@ -47,7 +47,7 @@ class MainWindow(QWidget):
         layout.addWidget(self.new_transcript_btn)
 
         # Кнопка для HMM-транскрибування
-        self.hmm_transcript_btn = QPushButton("🔍 HMM Транскрибування")
+        self.hmm_transcript_btn = QPushButton("🔍 DTW Транскрибування")
         self.hmm_transcript_btn.setStyleSheet(
             """
             QPushButton {

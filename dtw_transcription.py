@@ -1,6 +1,5 @@
 import librosa
 import numpy as np
-from fastdtw import fastdtw
 import os
 import soundfile as sf
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
@@ -61,7 +60,6 @@ class DTWTranscriptionWorker(QObject):
             intervals = librosa.effects.split(y, top_db=top_db)
             merged_intervals = []
 
-            # Злиття інтервалів, якщо пауза між ними менша за merge_threshold
             prev_start, prev_end = intervals[0]
             for start, end in intervals[1:]:
                 pause = (start - prev_end) / sr
@@ -82,10 +80,41 @@ class DTWTranscriptionWorker(QObject):
             self.error.emit(f"Помилка сегментації аудіо: {str(e)}")
             return [], None
 
-    def compare_mfcc(self, seq1, seq2):
-        """Порівняння двох MFCC-послідовностей за допомогою DTW."""
+    def custom_dtw(self, seq1, seq2, window=None):
         try:
-            distance, _ = fastdtw(seq1, seq2)
+            n, m = len(seq1), len(seq2)
+            if window is None:
+                window = (
+                    max(n, m) // 10
+                )  # Динамічне вікно (10% від максимальної довжини)
+
+            # Ініціалізація матриці вартостей
+            cost_matrix = np.full((n + 1, m + 1), np.inf)
+            cost_matrix[0, 0] = 0
+
+            # Заповнення матриці з обмеженням вікна
+            for i in range(1, n + 1):
+                j_min = max(1, i - window)
+                j_max = min(m + 1, i + window + 1)
+                for j in range(j_min, j_max):
+                    # Евклідова відстань між MFCC векторами
+                    dist = np.sqrt(np.sum((seq1[i - 1] - seq2[j - 1]) ** 2))
+                    # Мінімум з сусідніх елементів
+                    cost_matrix[i, j] = dist + min(
+                        cost_matrix[i - 1, j],  # вгору
+                        cost_matrix[i, j - 1],  # вправо
+                        cost_matrix[i - 1, j - 1],  # по діагоналі
+                    )
+
+            return cost_matrix[n, m]
+        except Exception as e:
+            self.error.emit(f"Помилка в custom_dtw: {str(e)}")
+            return np.inf
+
+    def compare_mfcc(self, seq1, seq2):
+        """Порівняння двох MFCC-послідовностей за допомогою власного DTW."""
+        try:
+            distance = self.custom_dtw(seq1, seq2)
             return distance
         except Exception as e:
             self.error.emit(f"Помилка порівняння MFCC: {str(e)}")
@@ -146,7 +175,6 @@ class DTWTranscriptionWorker(QObject):
 
                 # Форматування результату
                 if best_match:
-                    # Витягуємо назву слова з імені файлу (наприклад, "доброго_1.wav" -> "доброго")
                     word = best_match.split(".")[0].split("_")[0]
                     results.append({"start": start_time, "end": end_time, "text": word})
                     self.progress.emit(
