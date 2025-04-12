@@ -10,15 +10,13 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QFileDialog,
     QMessageBox,
-    QDialog,
     QApplication,
 )
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtGui import QFont, QMovie
+from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal, QObject
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from transcription import transcribe_audio
-from datetime import timedelta
 
 
 class TranscriptionWorker(QObject):
@@ -177,7 +175,7 @@ class ResultWindow(QWidget):
         """
         )
         self.progress_bar_media.setValue(0)
-        self.progress_bar_media.mousePressEvent = self.progress_bar_clicked 
+        self.progress_bar_media.mousePressEvent = self.progress_bar_clicked
         bottom_layout.addWidget(self.progress_bar_media, stretch=1)
 
         self.speed_label = QLabel("1.00x")
@@ -321,10 +319,12 @@ class ResultWindow(QWidget):
         if hasattr(self, "thread") and isinstance(self.thread, QThread):
             if self.thread.isRunning():
                 # if hasattr(self, "worker") and self.worker:
-                #     self.worker.stop()  
+                #     self.worker.stop()
                 self.thread.quit()
                 self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
-                if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                if (
+                    self.thread.isRunning()
+                ):  # Якщо потік ще працює, примусово завершуємо
                     self.thread.terminate()
                     self.thread.wait()  # Чекаємо завершення після terminate
                 self.thread.deleteLater()  # Видаляємо старий потік
@@ -370,7 +370,9 @@ class ResultWindow(QWidget):
         self.transcription = transcription
         self.transcription_list.clear()  # Очищаємо список перед оновленням
         for segment in transcription:
-            start_pos = len(str(self.transcription_list.count()))  # Позиція для відстеження
+            start_pos = len(
+                str(self.transcription_list.count())
+            )  # Позиція для відстеження
             segment_text = f"{segment['time']} {segment['text']}"
             item = QListWidgetItem(segment_text)
             item.setFont(QFont("Arial", 14))
@@ -397,8 +399,6 @@ class ResultWindow(QWidget):
             current_position = self.player.position()
             new_position = current_position + (seconds * 1000)
             self.player.setPosition(max(0, min(new_position, self.player.duration())))
-    
-
 
     def update_position(self, position):
         duration = self.player.duration()
@@ -416,8 +416,6 @@ class ResultWindow(QWidget):
     def update_duration(self, duration):
         if duration > 0:
             self.progress_bar_media.setMaximum(100)
-
-    
 
     def format_time_srt(self, seconds):
         hrs, rem = divmod(seconds, 3600)
@@ -473,7 +471,9 @@ class ResultWindow(QWidget):
                 #     self.worker.stop()
                 self.thread.quit()
                 self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
-                if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                if (
+                    self.thread.isRunning()
+                ):  # Якщо потік ще працює, примусово завершуємо
                     self.thread.terminate()
                     self.thread.wait()  # Чекаємо завершення після terminate
             self.thread.deleteLater()
@@ -523,7 +523,9 @@ class ResultWindow(QWidget):
                 if hasattr(self, "thread") and self.thread:
                     self.thread.quit()
                     self.thread.wait(100)  # Зменшуємо час очікування до 100 мс
-                    if self.thread.isRunning():  # Якщо потік ще працює, примусово завершуємо
+                    if (
+                        self.thread.isRunning()
+                    ):  # Якщо потік ще працює, примусово завершуємо
                         self.thread.terminate()
                         self.thread.wait()  # Чекаємо завершення після terminate
                     self.cleanup_thread()  # Очищаємо ресурси

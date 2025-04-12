@@ -5,7 +5,7 @@ from PyQt6.QtGui import QIcon
 from main_window import MainWindow
 from config_window import ConfigWindow
 from result_window import ResultWindow
-from dtw_result import DTWResultWindow  # Імпортуємо нову сторінку
+from dtw_result import DTWResultWindow
 
 
 class Interface(QMainWindow):

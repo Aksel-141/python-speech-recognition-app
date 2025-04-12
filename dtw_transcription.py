@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 import os
 import soundfile as sf
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal
 
 
 class DTWTranscriptionWorker(QObject):
