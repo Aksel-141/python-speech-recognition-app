@@ -78,7 +78,7 @@ class DTWResultWindow(QWidget):
 
         self.top_db_spin = QDoubleSpinBox()
         self.top_db_spin.setRange(5.0, 50.0)
-        self.top_db_spin.setValue(35.0)
+        self.top_db_spin.setValue(30.0)
         self.top_db_spin.setSingleStep(1.0)
         self.top_db_spin.setPrefix("Чутливість до пауз: ")
         self.top_db_spin.setToolTip(
@@ -90,7 +90,7 @@ class DTWResultWindow(QWidget):
 
         self.min_segment_spin = QDoubleSpinBox()
         self.min_segment_spin.setRange(0.05, 1.0)
-        self.min_segment_spin.setValue(0.2)
+        self.min_segment_spin.setValue(0.3)
         self.min_segment_spin.setSingleStep(0.05)
         self.min_segment_spin.setPrefix("Мін. тривалість звуку (с): ")
         self.min_segment_spin.setToolTip(
@@ -102,7 +102,7 @@ class DTWResultWindow(QWidget):
 
         self.min_pause_spin = QDoubleSpinBox()
         self.min_pause_spin.setRange(0.05, 1.0)
-        self.min_pause_spin.setValue(0.1)
+        self.min_pause_spin.setValue(0.4)
         self.min_pause_spin.setSingleStep(0.05)
         self.min_pause_spin.setPrefix("Мін. пауза між словами (с): ")
         self.min_pause_spin.setToolTip(

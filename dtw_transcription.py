@@ -14,10 +14,10 @@ class DTWTranscriptionWorker(QObject):
         self,
         file_path,
         reference_folder="reference_samples",
-        top_db=20,
-        n_mfcc=13,
-        min_segment_length=0.05,
-        min_pause_length=0.2,
+        top_db=30,  # Збільшено для кращого виявлення тиші
+        n_mfcc=20,  # Збільшено для детальнішого аналізу
+        min_segment_length=0.3,  # Збільшено для осмислених сегментів
+        min_pause_length=0.4,  # Збільшено для природних пауз
     ):
         super().__init__()
         self.file_path = file_path
@@ -33,16 +33,20 @@ class DTWTranscriptionWorker(QObject):
         return np.append(signal[0], signal[1:] - pre_emph * signal[:-1])
 
     def get_mfcc_sequence(self, file_path, n_mfcc):
-        """Отримання послідовності MFCC з додатковими ознаками."""
+        """Отримання послідовності MFCC з додатковими ознаками, включаючи енергію."""
         try:
             y, sr = librosa.load(file_path, sr=None)
             if self.sr is None:
                 self.sr = sr
+            y = librosa.util.normalize(y)  # Нормалізація аудіо
             y = self.pre_emphasis(y)
             mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
+            energy = librosa.feature.rms(y=y)  # Додано ознаку енергії
             delta_mfcc = librosa.feature.delta(mfcc)
             delta2_mfcc = librosa.feature.delta(mfcc, order=2)
-            combined = np.vstack([mfcc, delta_mfcc, delta2_mfcc]).T
+            # Об'єднання MFCC, дельт і енергії
+            combined = np.vstack([mfcc, delta_mfcc, delta2_mfcc, energy]).T
+            # Нормалізація за сегментами
             combined = (combined - np.mean(combined, axis=0)) / (
                 np.std(combined, axis=0) + 1e-8
             )
@@ -63,8 +67,19 @@ class DTWTranscriptionWorker(QObject):
             prev_start, prev_end = intervals[0]
             for start, end in intervals[1:]:
                 pause = (start - prev_end) / sr
+                # Динамічне об'єднання: перевіряємо енергію сусідніх сегментів
                 if pause < merge_threshold:
-                    prev_end = end
+                    energy_prev = librosa.feature.rms(y=y[prev_start:prev_end])[
+                        0
+                    ].mean()
+                    energy_curr = librosa.feature.rms(y=y[start:end])[0].mean()
+                    if (
+                        abs(energy_prev - energy_curr) < 0.1
+                    ):  # Якщо енергії схожі, об'єднуємо
+                        prev_end = end
+                    else:
+                        merged_intervals.append((prev_start, prev_end))
+                        prev_start, prev_end = start, end
                 else:
                     merged_intervals.append((prev_start, prev_end))
                     prev_start, prev_end = start, end
@@ -81,12 +96,10 @@ class DTWTranscriptionWorker(QObject):
             return [], None
 
     def custom_dtw(self, seq1, seq2, window=None):
+        """Покращена DTW з косинусною відстанню та адаптивним вікном."""
         try:
             n, m = len(seq1), len(seq2)
-            if window is None:
-                window = (
-                    max(n, m) // 10
-                )  # Динамічне вікно (10% від максимальної довжини)
+            window = max(n, m) // 3  # Смуга Сакое-Чіба, 30% від довшої послідовності
 
             # Ініціалізація матриці вартостей
             cost_matrix = np.full((n + 1, m + 1), np.inf)
@@ -97,8 +110,10 @@ class DTWTranscriptionWorker(QObject):
                 j_min = max(1, i - window)
                 j_max = min(m + 1, i + window + 1)
                 for j in range(j_min, j_max):
-                    # Евклідова відстань між MFCC векторами
-                    dist = np.sqrt(np.sum((seq1[i - 1] - seq2[j - 1]) ** 2))
+                    # Косинусна відстань між MFCC векторами
+                    dist = 1 - np.dot(seq1[i - 1], seq2[j - 1]) / (
+                        np.linalg.norm(seq1[i - 1]) * np.linalg.norm(seq2[j - 1]) + 1e-8
+                    )
                     # Мінімум з сусідніх елементів
                     cost_matrix[i, j] = dist + min(
                         cost_matrix[i - 1, j],  # вгору
@@ -112,7 +127,7 @@ class DTWTranscriptionWorker(QObject):
             return np.inf
 
     def compare_mfcc(self, seq1, seq2):
-        """Порівняння двох MFCC-послідовностей за допомогою власного DTW."""
+        """Порівняння двох MFCC-послідовностей за допомогою DTW."""
         try:
             distance = self.custom_dtw(seq1, seq2)
             return distance
@@ -121,6 +136,7 @@ class DTWTranscriptionWorker(QObject):
             return float("inf")
 
     def run(self):
+        """Основний метод для транскрибування аудіо."""
         try:
             # Сегментація аудіо
             self.progress.emit("Сегментуємо аудіо...")
@@ -138,6 +154,15 @@ class DTWTranscriptionWorker(QObject):
 
             results = []
             temp_files = []
+
+            # Групування референсів за словами
+            word_references = {}
+            for ref_file in os.listdir(self.reference_folder):
+                if ref_file.endswith((".wav", ".mp3")):
+                    word = ref_file.split(".")[0].split("_")[0]
+                    if word not in word_references:
+                        word_references[word] = []
+                    word_references[word].append(ref_file)
 
             # Аналіз кожного сегмента
             for i, (segment, start_time, end_time) in enumerate(segments):
@@ -159,8 +184,9 @@ class DTWTranscriptionWorker(QObject):
                 best_match = None
 
                 # Порівняння з референсами
-                for ref_file in os.listdir(self.reference_folder):
-                    if ref_file.endswith((".wav", ".mp3")):
+                for word, ref_files in word_references.items():
+                    distances = []
+                    for ref_file in ref_files:
                         ref_path = os.path.join(self.reference_folder, ref_file)
                         ref_mfcc_seq = self.get_mfcc_sequence(
                             ref_path, n_mfcc=self.n_mfcc
@@ -168,17 +194,22 @@ class DTWTranscriptionWorker(QObject):
                         if ref_mfcc_seq is None:
                             continue
                         distance = self.compare_mfcc(input_mfcc_seq, ref_mfcc_seq)
+                        distances.append(distance)
                         self.progress.emit(f"{ref_file}: DTW Distance = {distance:.2f}")
-                        if distance < min_distance:
-                            min_distance = distance
-                            best_match = ref_file
+                    if distances:
+                        distance = min(distances)
+                        if distance < 50:  # Порогове значення для відстані
+                            if distance < min_distance:
+                                min_distance = distance
+                                best_match = word
 
                 # Форматування результату
                 if best_match:
-                    word = best_match.split(".")[0].split("_")[0]
-                    results.append({"start": start_time, "end": end_time, "text": word})
+                    results.append(
+                        {"start": start_time, "end": end_time, "text": best_match}
+                    )
                     self.progress.emit(
-                        f"Найкращий збіг: {word} (DTW = {min_distance:.2f})"
+                        f"Найкращий збіг: {best_match} (DTW = {min_distance:.2f})"
                     )
                 else:
                     results.append(
