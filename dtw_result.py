@@ -1,4 +1,3 @@
-# DTW_result.py
 import os
 import numpy as np
 import librosa
@@ -16,21 +15,40 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QDoubleSpinBox,
 )
-from PyQt6.QtCore import Qt, QThread, QUrl
+from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from dtw_transcription import DTWTranscriptionWorker
 
 
+class AudioLoadWorker(QThread):
+    loaded = pyqtSignal(
+        str, object, int
+    )  # Сигнал для успішного завантаження: шлях, audio_data, sample_rate
+    error = pyqtSignal(str)  # Сигнал для помилки
+
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+
+    def run(self):
+        try:
+            audio_data, sample_rate = librosa.load(self.file_path, sr=None)
+            self.loaded.emit(self.file_path, audio_data, sample_rate)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class DTWResultWindow(QWidget):
     def __init__(self, parent=None):
-        super().__init__()
+        super().__init__(parent)
         self.parent = parent
         self.file_path = None
         self.audio_data = None
         self.sample_rate = None
         self.segments = []
         self.is_playing = False
+        self.load_thread = None  # Додаємо для асинхронного завантаження
         self.setStyleSheet(
             "background-color: #121212; color: white; font-family: Arial, sans-serif;"
         )
@@ -177,35 +195,79 @@ class DTWResultWindow(QWidget):
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
         self.player.positionChanged.connect(self.update_playback_position)
-        self.player.playbackStateChanged.connect(
-            self.on_player_state_changed
-        )  # Виправлено сигнал
+        self.player.playbackStateChanged.connect(self.on_player_state_changed)
 
         self.transcription = []
         self.thread = None
         self.worker = None
-        self.playback_line = None  # Мітка для поточної позиції відтворення
+        self.playback_line = None
 
     def select_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Вибрати аудіофайл", "", "Audio Files (*.wav *.mp3)"
         )
-        if file_path:
-            self.file_path = file_path
-            self.file_label.setText(f"Файл: {os.path.basename(file_path)}")
-            self.player.setSource(QUrl.fromLocalFile(file_path))
-            self.start_btn.setEnabled(True)
-            self.play_btn.setEnabled(True)
-            self.play_btn.setText("▶ Відтворити")
-            self.is_playing = False
+        if file_path and os.path.exists(file_path):
+            # Перевіряємо формат файлу
+            if not file_path.lower().endswith((".wav", ".mp3")):
+                self.file_label.setText("Помилка: Непідтримуваний формат файлу")
+                return
+
+            # Очищаємо попередній стан
+            self.cleanup_player()
             self.transcription_list.clear()
             self.export_btn.setEnabled(False)
-            self.progress_label.setText("Прогрес обробки: Очікування...")
+            self.progress_label.setText("Прогрес обробки: Завантаження файлу...")
             self.progress_bar.setValue(0)
-            self.load_and_plot_audio()
+            self.start_btn.setEnabled(False)
+            self.play_btn.setEnabled(False)
+
+            # Запускаємо асинхронне завантаження
+            self.load_thread = AudioLoadWorker(file_path)
+            self.load_thread.loaded.connect(self.on_audio_loaded)
+            self.load_thread.error.connect(self.on_audio_load_error)
+            self.load_thread.finished.connect(self.cleanup_load_thread)
+            self.load_thread.start()
+
+    def cleanup_player(self):
+        # Очищаємо стан плеєра
+        if self.player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
+            self.player.stop()
+        self.player.setSource(QUrl())  # Очищаємо джерело
+        self.is_playing = False
+        self.play_btn.setText("▶ Відтворити")
+        if self.playback_line:
+            self.playback_line.set_xdata([0, 0])
+            self.canvas.draw()
+
+    def cleanup_load_thread(self):
+        if self.load_thread:
+            if self.load_thread.isRunning():
+                self.load_thread.quit()
+                self.load_thread.wait()
+            self.load_thread.deleteLater()
+            self.load_thread = None
+
+    def on_audio_loaded(self, file_path, audio_data, sample_rate):
+        self.file_path = file_path
+        self.audio_data = audio_data
+        self.sample_rate = sample_rate
+        self.file_label.setText(f"Файл: {os.path.basename(file_path)}")
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+        self.start_btn.setEnabled(True)
+        self.play_btn.setEnabled(True)
+        self.load_and_plot_audio()
+        self.progress_label.setText("Прогрес обробки: Очікування...")
+        self.progress_bar.setValue(0)
+
+    def on_audio_load_error(self, error):
+        self.file_label.setText(f"Помилка: {error}")
+        self.progress_label.setText("Прогрес обробки: Помилка завантаження")
+        self.progress_bar.setValue(0)
+        self.start_btn.setEnabled(False)
+        self.play_btn.setEnabled(False)
+        self.cleanup_load_thread()
 
     def load_and_plot_audio(self):
-        self.audio_data, self.sample_rate = librosa.load(self.file_path, sr=None)
         self.ax.clear()
         time = np.linspace(
             0, len(self.audio_data) / self.sample_rate, num=len(self.audio_data)
@@ -219,7 +281,7 @@ class DTWResultWindow(QWidget):
         self.ax.tick_params(colors="white")
         self.playback_line = self.ax.axvline(
             x=0, color="red", linestyle="--", linewidth=1
-        )  # Додаємо мітку
+        )
         self.canvas.draw()
 
     def toggle_playback(self):
@@ -233,20 +295,16 @@ class DTWResultWindow(QWidget):
             self.is_playing = False
 
     def update_playback_position(self, position):
-        # Оновлюємо позицію мітки на графіку
         if self.audio_data is not None and self.sample_rate is not None:
-            current_time = (
-                position / 1000.0
-            )  # position у мілісекундах, переводимо в секунди
+            current_time = position / 1000.0
             self.playback_line.set_xdata([current_time, current_time])
             self.canvas.draw()
 
     def on_player_state_changed(self, state):
-        # Оновлюємо стан кнопки, коли відтворення закінчується
         if state == QMediaPlayer.PlaybackState.StoppedState:
             self.play_btn.setText("▶ Відтворити")
             self.is_playing = False
-            self.playback_line.set_xdata([0, 0])  # Повертаємо мітку на початок
+            self.playback_line.set_xdata([0, 0])
             self.canvas.draw()
 
     def start_transcription_thread(self):
@@ -326,7 +384,7 @@ class DTWResultWindow(QWidget):
         self.ax.tick_params(colors="white")
         self.playback_line = self.ax.axvline(
             x=0, color="red", linestyle="--", linewidth=1
-        )  # Оновлюємо мітку
+        )
         self.canvas.draw()
 
     def export_transcription(self):
@@ -344,8 +402,9 @@ class DTWResultWindow(QWidget):
 
     def back_to_main(self):
         if self.parent:
-            self.player.stop()
+            self.cleanup_player()
             self.cleanup_thread()
+            self.cleanup_load_thread()
             self.parent.switch_to_main()
 
 
